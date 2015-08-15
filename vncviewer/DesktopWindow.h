@@ -89,7 +89,12 @@ private:
   void ungrabKeyboard();
   void grabPointer();
   void ungrabPointer();
+  int grab_keyboard_state;
 
+
+  private:
+  static int fltkHandle(int event, Fl_Window *win);
+  
   static void handleGrab(void *data);
 
   void maximizeWindow();

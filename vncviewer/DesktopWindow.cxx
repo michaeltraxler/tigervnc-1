@@ -70,6 +70,9 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
     statsGraph(NULL)
 {
   Fl_Group* group;
+  grab_keyboard_state = 0;
+  scroll = new Fl_Scroll(0, 0, w, h);
+  scroll->color(FL_BLACK);
 
   // Dummy group to prevent FLTK from moving our widgets around
   group = new Fl_Group(0, 0, w, h);
@@ -679,6 +682,7 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
   if (dw) {
     switch (event) {
     case FL_FOCUS:
+<<<<<<< HEAD
       if (fullscreenSystemKeys) {
         // FIXME: We reassert the keyboard grabbing on focus as FLTK there are
         //        some issues we need to work around:
@@ -711,6 +715,25 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
       // see FL_RELEASE events if a child widget grabs it first)
       if (dw->keyboardGrabbed && !dw->mouseGrabbed)
         dw->grabPointer();
+=======
+      // FIXME: We reassert the keyboard grabbing on focus as FLTK there are
+      //        some issues we need to work around:
+      //        a) Fl::grab(0) on X11 will release the keyboard grab for us.
+      //        b) Gaining focus on the system level causes FLTK to switch
+      //           window level on OS X.
+      if (dw->fullscreen_active()) {
+        dw->grabKeyboard();
+        dw->grab_keyboard_state = 1;
+      }
+      break;
+
+    case FL_UNFOCUS:
+      // FIXME: We need to relinquish control when the entire window loses
+      //        focus as it is very tied to this specific window on some
+      //        platforms and we want to be able to open subwindows.
+      dw->ungrabKeyboard();
+      dw->grab_keyboard_state = 0;
+>>>>>>> added right-ctrl or Meta-L for catch focus, mt
       break;
     }
   }
