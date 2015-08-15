@@ -126,6 +126,10 @@ BoolParameter sendPrimary("SendPrimary",
                           "Send the primary selection and cut buffer to the "
                           "server as well as the clipboard selection",
                           true);
+BoolParameter hostKeyMetaL("HostKeyMetaL",
+                           "Use the MetaL (Windows-Key) instead of "
+                           "Control_R as the host key (grabKeyboard shortcut)",
+                           false);
 
 StringParameter menuKey("MenuKey", "The key which brings up the popup menu",
                         "F8");
@@ -166,6 +170,7 @@ static VoidParameter* parameterArray[] = {
   &acceptClipboard,
   &sendClipboard,
   &sendPrimary,
+  &hostKeyMetaL,
   &menuKey,
   &fullscreenSystemKeys
 };

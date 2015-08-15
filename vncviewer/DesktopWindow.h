@@ -67,12 +67,13 @@ public:
 
   void fullscreen_on();
 
-private:
-  static int fltkHandle(int event, Fl_Window *win);
-
   void grabKeyboard();
   void ungrabKeyboard();
+  int grab_keyboard_state;
 
+  private:
+  static int fltkHandle(int event, Fl_Window *win);
+  
   static void handleGrab(void *data);
 
   void maximizeWindow();

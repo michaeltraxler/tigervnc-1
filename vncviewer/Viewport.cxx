@@ -331,6 +331,8 @@ int Viewport::handle(int event)
   int buttonMask, wheelMask;
   DownMap::const_iterator iter;
 
+  DesktopWindow *dw = dynamic_cast<DesktopWindow*>(window());
+  
   switch (event) {
   case FL_PASTE:
     buffer = new char[Fl::event_length() + 1];
@@ -405,10 +407,26 @@ int Viewport::handle(int event)
     // sense (e.g. Alt+Tab where we only see the Alt press)
     while (!downKeySym.empty())
       handleKeyRelease(downKeySym.begin()->first);
+    dw->ungrabKeyboard();
+    dw->fullscreen_off();
     Fl::enable_im();
     return 1;
 
   case FL_KEYDOWN:
+    // Code to use Control_R as a grabKeyboard shortcut, as in remmina
+    if (menuKeyCode && (Fl::event_key() == (hostKeyMetaL ? FL_Meta_L : FL_Control_R) ) ) {
+      if(dw->grab_keyboard_state == 0) {
+        dw->grab_keyboard_state = 1;
+        dw->grabKeyboard();
+      }
+            else  {
+              dw->grab_keyboard_state = 0;
+              dw->fullscreen_off();
+              dw->ungrabKeyboard();
+                    }
+      //window()->fullscreen_off();
+      vlog.debug("keyboard_grab key (ctrl-right) hit, keyboard grab state: %d\n", dw->grab_keyboard_state);
+    }
   case FL_KEYUP:
     // Just ignore these as keys were handled in the event handler
     return 1;

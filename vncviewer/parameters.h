@@ -53,6 +53,7 @@ extern rfb::BoolParameter shared;
 extern rfb::BoolParameter acceptClipboard;
 extern rfb::BoolParameter sendClipboard;
 extern rfb::BoolParameter sendPrimary;
+extern rfb::BoolParameter hostKeyMetaL;
 
 extern rfb::StringParameter menuKey;
 
