@@ -520,6 +520,7 @@ int main(int argc, char** argv)
   }
 
   mkvnchomedir();
+  
 
 #if !defined(WIN32) && !defined(__APPLE__)
   fl_open_display();
@@ -612,6 +613,7 @@ int main(int argc, char** argv)
   }
 
   CConn *cc = new CConn(vncServerName, sock);
+
 
   while (!exitMainloop)
     run_mainloop();
