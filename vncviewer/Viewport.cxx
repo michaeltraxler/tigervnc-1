@@ -709,12 +709,14 @@ void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
     if(dw->grab_keyboard_state == 0) {
       dw->grab_keyboard_state = 1;
       dw->grabKeyboard();
-      //xprintf("got special key to grab keyboard: sym: %d\n", keySym);
+      //printf("got special key to grab keyboard: sym: %d\n", keySym);
     }
     else  {
       dw->grab_keyboard_state = 0;
       dw->fullscreen_off();
       dw->ungrabKeyboard();
+      dw->hide();
+      dw->show();
       //printf("got special key to ungrab keyboard: sym: %d\n", keySym);
     }
     vlog.debug("keyboard_grab key (ctrl-right) hit, keyboard grab state: %d\n", dw->grab_keyboard_state);
