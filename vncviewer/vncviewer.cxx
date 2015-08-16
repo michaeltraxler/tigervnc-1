@@ -497,6 +497,7 @@ int main(int argc, char** argv)
     }
 
   mkvnchomedir();
+  
 
   CSecurity::upg = &dlg;
 #ifdef HAVE_GNUTLS
@@ -590,6 +591,7 @@ int main(int argc, char** argv)
       vlog.error(_("Internal FLTK error. Exiting."));
       break;
     }
+
   }
 
   delete cc;

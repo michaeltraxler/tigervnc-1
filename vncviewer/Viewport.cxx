@@ -413,21 +413,7 @@ int Viewport::handle(int event)
     return 1;
 
   case FL_KEYDOWN:
-    // Code to use Control_R as a grabKeyboard shortcut, as in remmina
-    if (menuKeyCode && (Fl::event_key() == (hostKeyMetaL ? FL_Meta_L : FL_Control_R) ) ) {
-      if(dw->grab_keyboard_state == 0) {
-        dw->grab_keyboard_state = 1;
-        dw->grabKeyboard();
-      }
-            else  {
-              dw->grab_keyboard_state = 0;
-              dw->fullscreen_off();
-              dw->ungrabKeyboard();
-                    }
-      //window()->fullscreen_off();
-      vlog.debug("keyboard_grab key (ctrl-right) hit, keyboard grab state: %d\n", dw->grab_keyboard_state);
-    }
-  case FL_KEYUP:
+  case FL_SHORTCUT:
     // Just ignore these as keys were handled in the event handler
     return 1;
   }
@@ -513,6 +499,25 @@ void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
 
   // Prevent recursion if the menu wants to send its own
   // activation key.
+  DesktopWindow *dw = dynamic_cast<DesktopWindow*>(window());
+  
+  if ( keySym == (hostKeyMetaL ? XK_Alt_L : XK_Control_R) ) {
+    // Code to use Control_R as a grabKeyboard shortcut, as in remmina
+    //printf("got special key to grab keyboard: sym: %d\n", keySym);
+    if(dw->grab_keyboard_state == 0) {
+      dw->grab_keyboard_state = 1;
+      dw->grabKeyboard();
+      //xprintf("got special key to grab keyboard: sym: %d\n", keySym);
+    }
+    else  {
+      dw->grab_keyboard_state = 0;
+      dw->fullscreen_off();
+      dw->ungrabKeyboard();
+      //printf("got special key to ungrab keyboard: sym: %d\n", keySym);
+    }
+    vlog.debug("keyboard_grab key (ctrl-right) hit, keyboard grab state: %d\n", dw->grab_keyboard_state);
+  }
+  
   if (menuKeySym && (keySym == menuKeySym) && !menuRecursion) {
     menuRecursion = true;
     popupContextMenu();

@@ -376,6 +376,9 @@ int DesktopWindow::handle(int event)
   case FL_ENTER:
   case FL_LEAVE:
   case FL_DRAG:
+  case FL_KEYDOWN:
+  case FL_KEYUP:
+    break;
   case FL_MOVE:
     if (fullscreen_active()) {
       if (((viewport->x() < 0) && (Fl::event_x() < EDGE_SCROLL_SIZE)) ||
@@ -407,6 +410,7 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
 
   DesktopWindow *dw = dynamic_cast<DesktopWindow*>(win);
 
+  
   if (dw && fullscreenSystemKeys) {
     switch (event) {
     case FL_FOCUS:
@@ -420,7 +424,7 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
         dw->grab_keyboard_state = 1;
       }
       break;
-
+          
     case FL_UNFOCUS:
       // FIXME: We need to relinquish control when the entire window loses
       //        focus as it is very tied to this specific window on some
@@ -435,7 +439,8 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
 }
 
 
-void DesktopWindow::fullscreen_on()
+
+  void DesktopWindow::fullscreen_on()
 {
   if (not fullScreenAllMonitors)
     fullscreen_screens(-1, -1, -1, -1);
