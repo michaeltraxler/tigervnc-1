@@ -1,3 +1,10 @@
+The change in this branch is only to add a hotkey to grab_keyboard() to be locked in the remote session. My requirement is that this lock and unlock has to be very fast end efficient therefore just a hotkey. For remote windowmanagers like awesome this is absolutely needed.
+Issue:
+https://github.com/TigerVNC/tigervnc/issues/2
+
+I hope in the future this will be added to upstream but I'm not experienced enough to make this patch to a real pull request.
+
+
 About TigerVNC
 ==============
 
