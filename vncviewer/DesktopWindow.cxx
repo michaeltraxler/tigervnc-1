@@ -70,6 +70,7 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
 {
   Fl_Group* group;
 
+  grab_keyboard_state = 0;
   // Dummy group to prevent FLTK from moving our widgets around
   group = new Fl_Group(0, 0, w, h);
   group->resizable(NULL);
@@ -629,6 +630,9 @@ int DesktopWindow::handle(int event)
   case FL_ENTER:
   case FL_LEAVE:
   case FL_DRAG:
+  case FL_KEYDOWN:
+  case FL_KEYUP:
+    break;
   case FL_MOVE:
     if (fullscreen_active()) {
       if (((viewport->x() < 0) && (Fl::event_x() < EDGE_SCROLL_SIZE)) ||
@@ -668,8 +672,10 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
       //        a) Fl::grab(0) on X11 will release the keyboard grab for us.
       //        b) Gaining focus on the system level causes FLTK to switch
       //           window level on OS X.
-      if (dw->fullscreen_active())
+      if (dw->fullscreen_active()) {
         dw->grabKeyboard();
+        dw->grab_keyboard_state = 1;
+      }
       break;
 
     case FL_UNFOCUS:
@@ -677,6 +683,7 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
       //        focus as it is very tied to this specific window on some
       //        platforms and we want to be able to open subwindows.
       dw->ungrabKeyboard();
+      dw->grab_keyboard_state = 0;
       break;
     }
   }

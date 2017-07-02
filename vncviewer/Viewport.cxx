@@ -266,6 +266,8 @@ int Viewport::handle(int event)
   int buttonMask, wheelMask;
   DownMap::const_iterator iter;
 
+  DesktopWindow *dw = dynamic_cast<DesktopWindow*>(window());
+
   switch (event) {
   case FL_PASTE:
     buffer = new char[Fl::event_length() + 1];
@@ -340,13 +342,15 @@ int Viewport::handle(int event)
     // sense (e.g. Alt+Tab where we only see the Alt press)
     while (!downKeySym.empty())
       handleKeyRelease(downKeySym.begin()->first);
+    dw->ungrabKeyboard();
+    dw->fullscreen_off();
     Fl::enable_im();
     return 1;
 
-  case FL_KEYDOWN:
-  case FL_KEYUP:
+    //case FL_KEYDOWN:
+    // case FL_KEYUP:
     // Just ignore these as keys were handled in the event handler
-    return 1;
+    //return 1;
   }
 
   return Fl_Widget::handle(event);
@@ -409,7 +413,7 @@ void Viewport::handlePointerTimeout(void *data)
 void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
 {
   static bool menuRecursion = false;
-
+  DesktopWindow *dw = dynamic_cast<DesktopWindow*>(window());
   // Prevent recursion if the menu wants to send its own
   // activation key.
   if (menuKeySym && (keySym == menuKeySym) && !menuRecursion) {
@@ -422,6 +426,25 @@ void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
   if (viewOnly)
     return;
 
+
+    // Code to use Control_R as a grabKeyboard shortcut, as in remmina
+  //printf("Fl::event_key: %d\n", keyCode);
+  if (&menuKeyCode && (keySym == (hostKeyMetaL ? FL_Meta_L : FL_Control_R)  ) ) {
+    if(dw->grab_keyboard_state == 0) {
+      dw->grab_keyboard_state = 1;
+      dw->grabKeyboard();
+    } else {
+      dw->grab_keyboard_state = 0;
+      dw->fullscreen_off();
+      dw->ungrabKeyboard();
+      dw->hide();
+      dw->show();
+    }
+    //window()->fullscreen_off();
+    vlog.debug("keyboard_grab key (ctrl-right) hit, keyboard grab state: %d\n", dw->grab_keyboard_state);
+  }
+
+  
 #ifdef __APPLE__
   // Alt on OS X behaves more like AltGr on other systems, and to get
   // sane behaviour we should translate things in that manner for the
