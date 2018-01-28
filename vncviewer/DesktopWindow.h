@@ -77,14 +77,6 @@ public:
 
   void fullscreen_on();
 
-private:
-  static void menuOverlay(void *data);
-
-  void setOverlay(const char *text, ...) __printf_attr(2, 3);
-  static void updateOverlay(void *data);
-
-  static int fltkHandle(int event, Fl_Window *win);
-
   void grabKeyboard();
   void ungrabKeyboard();
   void grabPointer();
@@ -92,7 +84,17 @@ private:
   int grab_keyboard_state;
 
 
-  private:
+ private:
+  static void menuOverlay(void *data);
+
+  void setOverlay(const char *text, ...) __printf_attr(2, 3);
+  static void updateOverlay(void *data);
+
+  //static int fltkHandle(int event, Fl_Window *win);
+
+
+
+  //  private:
   static int fltkHandle(int event, Fl_Window *win);
   
   static void handleGrab(void *data);
