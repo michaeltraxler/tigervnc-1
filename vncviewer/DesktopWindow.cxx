@@ -71,8 +71,8 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
 {
   Fl_Group* group;
   grab_keyboard_state = 0;
-  scroll = new Fl_Scroll(0, 0, w, h);
-  scroll->color(FL_BLACK);
+  //scroll = new Fl_Scroll(0, 0, w, h);
+  //scroll->color(FL_BLACK);
 
   // Dummy group to prevent FLTK from moving our widgets around
   group = new Fl_Group(0, 0, w, h);
