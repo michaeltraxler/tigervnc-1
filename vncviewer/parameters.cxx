@@ -138,6 +138,7 @@ BoolParameter hostKeyMetaL("HostKeyMetaL",
                            "Use the MetaL (Windows-Key) instead of "
                            "Control_R as the host key (grabKeyboard shortcut)",
                            false);
+#endif
 
 StringParameter menuKey("MenuKey", "The key which brings up the popup menu",
                         "F8");
@@ -179,11 +180,8 @@ static VoidParameter* parameterArray[] = {
   &sendClipboard,
 #if !defined(WIN32) && !defined(__APPLE__)
   &sendPrimary,
-<<<<<<< HEAD
-#endif
-=======
->>>>>>> b3590cd68d4b52998365d1bc7d7a94ceb698f053
   &hostKeyMetaL,
+#endif
   &menuKey,
   &fullscreenSystemKeys,
   &alertOnFatalError

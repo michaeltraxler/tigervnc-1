@@ -619,14 +619,6 @@ int main(int argc, char** argv)
   while (!exitMainloop)
     run_mainloop();
 
-    if (Fl::wait((double)next_timer / 1000.0) < 0.0) {
-      vlog.error(_("Internal FLTK error. Exiting."));
-      break;
-    }
-
-  }
-
-
   delete cc;
 
   if (exitError != NULL && alertOnFatalError)
