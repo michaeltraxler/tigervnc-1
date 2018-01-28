@@ -181,11 +181,8 @@ static VoidParameter* parameterArray[] = {
   &sendClipboard,
 #if !defined(WIN32) && !defined(__APPLE__)
   &sendPrimary,
-<<<<<<< HEAD
 #endif
-=======
   &hostKeyMetaL,
->>>>>>> added right-ctrl or Meta-L for catch focus, mt
   &menuKey,
   &fullscreenSystemKeys,
   &alertOnFatalError
