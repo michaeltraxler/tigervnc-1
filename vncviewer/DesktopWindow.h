@@ -79,6 +79,7 @@ public:
 
   void grabKeyboard();
   void ungrabKeyboard();
+
   void grabPointer();
   void ungrabPointer();
   int grab_keyboard_state;

@@ -55,8 +55,6 @@ extern rfb::BoolParameter setPrimary;
 extern rfb::BoolParameter sendClipboard;
 #if !defined(WIN32) && !defined(__APPLE__)
 extern rfb::BoolParameter sendPrimary;
-#endif
-
 extern rfb::BoolParameter hostKeyMetaL;
 
 extern rfb::StringParameter menuKey;

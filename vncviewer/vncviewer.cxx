@@ -615,8 +615,17 @@ int main(int argc, char** argv)
   CConn *cc = new CConn(vncServerName, sock);
 
 
+
   while (!exitMainloop)
     run_mainloop();
+
+    if (Fl::wait((double)next_timer / 1000.0) < 0.0) {
+      vlog.error(_("Internal FLTK error. Exiting."));
+      break;
+    }
+
+  }
+
 
   delete cc;
 

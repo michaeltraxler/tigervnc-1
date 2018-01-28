@@ -69,10 +69,16 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
     statsLastFrame(0), statsLastPixels(0), statsLastPosition(0),
     statsGraph(NULL)
 {
+<<<<<<< HEAD
   Fl_Group* group;
   grab_keyboard_state = 0;
   //scroll = new Fl_Scroll(0, 0, w, h);
   //scroll->color(FL_BLACK);
+=======
+  grab_keyboard_state = 0;
+  scroll = new Fl_Scroll(0, 0, w, h);
+  scroll->color(FL_BLACK);
+>>>>>>> b3590cd68d4b52998365d1bc7d7a94ceb698f053
 
   // Dummy group to prevent FLTK from moving our widgets around
   group = new Fl_Group(0, 0, w, h);
@@ -686,6 +692,7 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
   if (dw && fullscreenSystemKeys) {
     switch (event) {
     case FL_FOCUS:
+
       if (fullscreenSystemKeys) {
         // FIXME: We reassert the keyboard grabbing on focus as FLTK there are
         //        some issues we need to work around:
@@ -702,8 +709,9 @@ int DesktopWindow::fltkHandle(int event, Fl_Window *win)
       // whilst we didn't have focus. Try to sort this out.
       dw->viewport->pushLEDState();
       break;
-
+          
     case FL_UNFOCUS:
+
       if (fullscreenSystemKeys) {
         // FIXME: We need to relinquish control when the entire window loses
         //        focus as it is very tied to this specific window on some

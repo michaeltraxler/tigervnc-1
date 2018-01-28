@@ -134,8 +134,6 @@ BoolParameter sendPrimary("SendPrimary",
                           "Send the primary selection to the "
                           "server as well as the clipboard selection",
                           true);
-#endif
-
 BoolParameter hostKeyMetaL("HostKeyMetaL",
                            "Use the MetaL (Windows-Key) instead of "
                            "Control_R as the host key (grabKeyboard shortcut)",
@@ -181,7 +179,10 @@ static VoidParameter* parameterArray[] = {
   &sendClipboard,
 #if !defined(WIN32) && !defined(__APPLE__)
   &sendPrimary,
+<<<<<<< HEAD
 #endif
+=======
+>>>>>>> b3590cd68d4b52998365d1bc7d7a94ceb698f053
   &hostKeyMetaL,
   &menuKey,
   &fullscreenSystemKeys,
