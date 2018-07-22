@@ -39,6 +39,9 @@
 #include <rdr/MemInStream.h>
 #include <rdr/MemOutStream.h>
 #include <network/TcpSocket.h>
+#ifndef WIN32
+#include <network/UnixSocket.h>
+#endif
 
 #include <FL/Fl.H>
 #include <FL/fl_ask.H>
@@ -73,7 +76,7 @@ static const PixelFormat mediumColourPF(8, 8, false, true,
 
 CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
   : serverHost(0), serverPort(0), desktop(NULL),
-    frameCount(0), pixelCount(0), pendingPFChange(false),
+    updateCount(0), pixelCount(0), pendingPFChange(false),
     currentEncoding(encodingTight), lastServerEncoding((unsigned int)-1),
     formatChange(false), encodingChange(false),
     firstUpdate(true), pendingUpdate(false), continuousUpdates(false),
@@ -106,10 +109,19 @@ CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
 
   if(sock == NULL) {
     try {
-      getHostAndPort(vncServerName, &serverHost, &serverPort);
+#ifndef WIN32
+      if (strchr(vncServerName, '/') != NULL) {
+        sock = new network::UnixSocket(vncServerName);
+        serverHost = sock->getPeerAddress();
+        vlog.info(_("connected to socket %s"), serverHost);
+      } else
+#endif
+      {
+        getHostAndPort(vncServerName, &serverHost, &serverPort);
 
-      sock = new network::TcpSocket(serverHost, serverPort);
-      vlog.info(_("connected to host %s port %d"), serverHost, serverPort);
+        sock = new network::TcpSocket(serverHost, serverPort);
+        vlog.info(_("connected to host %s port %d"), serverHost, serverPort);
+      }
     } catch (rdr::Exception& e) {
       vlog.error("%s", e.str());
       if (alertOnFatalError)
@@ -226,9 +238,9 @@ const char *CConn::connectionInfo()
   return infoText;
 }
 
-unsigned CConn::getFrameCount()
+unsigned CConn::getUpdateCount()
 {
-  return frameCount;
+  return updateCount;
 }
 
 unsigned CConn::getPixelCount()
@@ -383,7 +395,7 @@ void CConn::framebufferUpdateEnd()
 {
   CConnection::framebufferUpdateEnd();
 
-  frameCount++;
+  updateCount++;
 
   Fl::remove_timeout(handleUpdateTimeout, this);
   desktop->updateWindow();
@@ -423,32 +435,7 @@ void CConn::bell()
 
 void CConn::serverCutText(const char* str, rdr::U32 len)
 {
-  char *buffer;
-  int size, ret;
-
-  if (!acceptClipboard)
-    return;
-
-  size = fl_utf8froma(NULL, 0, str, len);
-  if (size <= 0)
-    return;
-
-  size++;
-
-  buffer = new char[size];
-
-  ret = fl_utf8froma(buffer, size, str, len);
-  assert(ret < size);
-
-  vlog.debug("Got clipboard data (%d bytes)", (int)strlen(buffer));
-
-  // RFB doesn't have separate selection and clipboard concepts, so we
-  // dump the data into both variants.
-  if (setPrimary)
-    Fl::copy(buffer, ret, 0);
-  Fl::copy(buffer, ret, 1);
-
-  delete [] buffer;
+  desktop->serverCutText(str, len);
 }
 
 void CConn::dataRect(const Rect& r, int encoding)

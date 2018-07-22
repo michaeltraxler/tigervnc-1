@@ -37,13 +37,14 @@
 #include <rfb/Configuration.h>
 #include <rfb/VNCServerST.h>
 #include <rdr/SubstitutingInStream.h>
+#include <unixcommon.h>
 #include "Input.h"
 
 namespace rfb {
   class VNCServerST;
 }
 
-namespace network { class TcpListener; class Socket; class SocketServer; }
+namespace network { class SocketListener; class Socket; class SocketServer; }
 
 class XserverDesktop : public rfb::SDesktop, public rfb::FullFramePixelBuffer,
                        public rdr::Substitutor,
@@ -52,8 +53,8 @@ class XserverDesktop : public rfb::SDesktop, public rfb::FullFramePixelBuffer,
 public:
 
   XserverDesktop(int screenIndex,
-                 std::list<network::TcpListener*> listeners_,
-                 std::list<network::TcpListener*> httpListeners_,
+                 std::list<network::SocketListener*> listeners_,
+                 std::list<network::SocketListener*> httpListeners_,
                  const char* name, const rfb::PixelFormat &pf,
                  int width, int height, void* fbptr, int stride);
   virtual ~XserverDesktop();
@@ -108,7 +109,7 @@ public:
 
 protected:
   bool handleListenerEvent(int fd,
-                           std::list<network::TcpListener*>* sockets,
+                           std::list<network::SocketListener*>* sockets,
                            network::SocketServer* sockserv);
   bool handleSocketEvent(int fd,
                          network::SocketServer* sockserv,
@@ -117,13 +118,12 @@ protected:
   virtual bool handleTimeout(rfb::Timer* t);
 
 private:
-  rfb::ScreenSet computeScreenLayout();
 
   int screenIndex;
   rfb::VNCServerST* server;
   rfb::HTTPServer* httpServer;
-  std::list<network::TcpListener*> listeners;
-  std::list<network::TcpListener*> httpListeners;
+  std::list<network::SocketListener*> listeners;
+  std::list<network::SocketListener*> httpListeners;
   bool directFbptr;
 
   uint32_t queryConnectId;
@@ -132,10 +132,7 @@ private:
   rfb::CharArray queryConnectUsername;
   rfb::Timer queryConnectTimer;
 
-#ifdef RANDR
-  typedef std::map<intptr_t, rdr::U32> OutputIdMap;
   OutputIdMap outputIdMap;
-#endif
 
   rfb::Point oldCursorPos;
 };

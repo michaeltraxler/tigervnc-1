@@ -115,6 +115,11 @@ static const WORD SCAN_FAKE = 0xaa;
 Viewport::Viewport(int w, int h, const rfb::PixelFormat& serverPF, CConn* cc_)
   : Fl_Widget(0, 0, w, h), cc(cc_), frameBuffer(NULL),
     lastPointerPos(0, 0), lastButtonMask(0),
+#ifdef WIN32
+    altGrArmed(false),
+#endif
+    firstLEDState(true),
+    pendingServerCutText(NULL), pendingClientCutText(NULL),
     menuCtrlKey(false), menuAltKey(false), cursor(NULL)
 {
 #if !defined(WIN32) && !defined(__APPLE__)
@@ -187,6 +192,9 @@ Viewport::~Viewport()
   // Unregister all timeouts in case they get a change tro trigger
   // again later when this object is already gone.
   Fl::remove_timeout(handlePointerTimeout, this);
+#ifdef WIN32
+  Fl::remove_timeout(handleAltGrTimeout, this);
+#endif
 
   Fl::remove_system_handler(handleSystemEvent);
 
@@ -199,6 +207,8 @@ Viewport::~Viewport()
       delete [] cursor->array;
     delete cursor;
   }
+
+  clearPendingClipboard();
 
   // FLTK automatically deletes all child widgets, so we shouldn't touch
   // them ourselves here
@@ -220,6 +230,43 @@ void Viewport::updateWindow()
 
   r = frameBuffer->getDamage();
   damage(FL_DAMAGE_USER1, r.tl.x + x(), r.tl.y + y(), r.width(), r.height());
+}
+
+void Viewport::serverCutText(const char* str, rdr::U32 len)
+{
+  char *buffer;
+  int size, ret;
+
+  clearPendingClipboard();
+
+  if (!acceptClipboard)
+    return;
+
+  size = fl_utf8froma(NULL, 0, str, len);
+  if (size <= 0)
+    return;
+
+  size++;
+
+  buffer = new char[size];
+
+  ret = fl_utf8froma(buffer, size, str, len);
+  assert(ret < size);
+
+  vlog.debug("Got clipboard data (%d bytes)", (int)strlen(buffer));
+
+  if (!hasFocus()) {
+    pendingServerCutText = buffer;
+    return;
+  }
+
+  // RFB doesn't have separate selection and clipboard concepts, so we
+  // dump the data into both variants.
+  if (setPrimary)
+    Fl::copy(buffer, ret, 0);
+  Fl::copy(buffer, ret, 1);
+
+  delete [] buffer;
 }
 
 static const char * dotcursor_xpm[] = {
@@ -273,17 +320,18 @@ void Viewport::setCursor(int width, int height, const Point& hotspot,
 
 void Viewport::setLEDState(unsigned int state)
 {
-  Fl_Widget *focus;
-
   vlog.debug("Got server LED state: 0x%08x", state);
 
-  focus = Fl::grab();
-  if (!focus)
-    focus = Fl::focus();
-  if (!focus)
+  // The first message is just considered to be the server announcing
+  // support for this extension, so start by pushing our state to the
+  // remote end to get things in sync
+  if (firstLEDState) {
+    firstLEDState = false;
+    pushLEDState();
     return;
+  }
 
-  if (focus != this)
+  if (!hasFocus())
     return;
 
 #if defined(WIN32)
@@ -508,15 +556,22 @@ int Viewport::handle(int event)
   case FL_PASTE:
     buffer = new char[Fl::event_length() + 1];
 
+    clearPendingClipboard();
+
     // This is documented as to ASCII, but actually does to 8859-1
     ret = fl_utf8toa(Fl::event_text(), Fl::event_length(), buffer,
                      Fl::event_length() + 1);
     assert(ret < (Fl::event_length() + 1));
 
+    if (!hasFocus()) {
+      pendingClientCutText = buffer;
+      return 1;
+    }
+
     vlog.debug("Sending clipboard data (%d bytes)", (int)strlen(buffer));
 
     try {
-      cc->writer()->clientCutText(buffer, ret);
+      cc->writer()->writeClientCutText(buffer, ret);
     } catch (rdr::Exception& e) {
       vlog.error("%s", e.str());
       exit_vncviewer(e.str());
@@ -570,6 +625,19 @@ int Viewport::handle(int event)
 
   case FL_FOCUS:
     Fl::disable_im();
+
+    flushPendingClipboard();
+
+    // We may have gotten our lock keys out of sync with the server
+    // whilst we didn't have focus. Try to sort this out.
+    pushLEDState();
+
+    // Resend Ctrl/Alt if needed
+    if (menuCtrlKey)
+      handleKeyPress(0x1d, XK_Control_L);
+    if (menuAltKey)
+      handleKeyPress(0x38, XK_Alt_L);
+
     // Yes, we would like some focus please!
     return 1;
 
@@ -592,6 +660,17 @@ int Viewport::handle(int event)
   return Fl_Widget::handle(event);
 }
 
+
+bool Viewport::hasFocus()
+{
+  Fl_Widget* focus;
+
+  focus = Fl::grab();
+  if (!focus)
+    focus = Fl::focus();
+
+  return focus == this;
+}
 
 #if ! (defined(WIN32) || defined(__APPLE__))
 unsigned int Viewport::getModifierMask(unsigned int keysym)
@@ -659,12 +738,44 @@ void Viewport::handleClipboardChange(int source, void *data)
 }
 
 
+void Viewport::clearPendingClipboard()
+{
+  delete [] pendingServerCutText;
+  pendingServerCutText = NULL;
+  delete [] pendingClientCutText;
+  pendingClientCutText = NULL;
+}
+
+
+void Viewport::flushPendingClipboard()
+{
+  if (pendingServerCutText) {
+    size_t len = strlen(pendingServerCutText);
+    if (setPrimary)
+      Fl::copy(pendingServerCutText, len, 0);
+    Fl::copy(pendingServerCutText, len, 1);
+  }
+  if (pendingClientCutText) {
+    size_t len = strlen(pendingClientCutText);
+    vlog.debug("Sending pending clipboard data (%d bytes)", (int)len);
+    try {
+      cc->writer()->writeClientCutText(pendingClientCutText, len);
+    } catch (rdr::Exception& e) {
+      vlog.error("%s", e.str());
+      exit_vncviewer(e.str());
+    }
+  }
+
+  clearPendingClipboard();
+}
+
+
 void Viewport::handlePointerEvent(const rfb::Point& pos, int buttonMask)
 {
   if (!viewOnly) {
     if (pointerEventInterval == 0 || buttonMask != lastButtonMask) {
       try {
-        cc->writer()->pointerEvent(pos, buttonMask);
+        cc->writer()->writePointerEvent(pos, buttonMask);
       } catch (rdr::Exception& e) {
         vlog.error("%s", e.str());
         exit_vncviewer(e.str());
@@ -687,7 +798,8 @@ void Viewport::handlePointerTimeout(void *data)
   assert(self);
 
   try {
-    self->cc->writer()->pointerEvent(self->lastPointerPos, self->lastButtonMask);
+    self->cc->writer()->writePointerEvent(self->lastPointerPos,
+                                          self->lastButtonMask);
   } catch (rdr::Exception& e) {
     vlog.error("%s", e.str());
     exit_vncviewer(e.str());
@@ -759,26 +871,6 @@ void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
   }
 #endif
 
-#ifdef WIN32
-  // Ugly hack alert!
-  //
-  // Windows doesn't have a proper AltGr, but handles it using fake
-  // Ctrl+Alt. Unfortunately X11 doesn't generally like the combination
-  // Ctrl+Alt+AltGr, which we usually end up with when Xvnc tries to
-  // get everything in the correct state. Cheat and temporarily release
-  // Ctrl and Alt when we send some other symbol.
-  if (downKeySym.count(0x1d) && downKeySym.count(0xb8)) {
-    vlog.debug("Faking release of AltGr (Ctrl_L+Alt_R)");
-    try {
-      cc->writer()->keyEvent(downKeySym[0x1d], 0x1d, false);
-      cc->writer()->keyEvent(downKeySym[0xb8], 0xb8, false);
-    } catch (rdr::Exception& e) {
-      vlog.error("%s", e.str());
-      exit_vncviewer(e.str());
-    }
-  }
-#endif
-
   // Because of the way keyboards work, we cannot expect to have the same
   // symbol on release as when pressed. This breaks the VNC protocol however,
   // so we need to keep track of what keysym a key _code_ generated on press
@@ -795,27 +887,13 @@ void Viewport::handleKeyPress(int keyCode, rdr::U32 keySym)
   try {
     // Fake keycode?
     if (keyCode > 0xff)
-      cc->writer()->keyEvent(keySym, 0, true);
+      cc->writer()->writeKeyEvent(keySym, 0, true);
     else
-      cc->writer()->keyEvent(keySym, keyCode, true);
+      cc->writer()->writeKeyEvent(keySym, keyCode, true);
   } catch (rdr::Exception& e) {
     vlog.error("%s", e.str());
     exit_vncviewer(e.str());
   }
-
-#ifdef WIN32
-  // Ugly hack continued...
-  if (downKeySym.count(0x1d) && downKeySym.count(0xb8)) {
-    vlog.debug("Restoring AltGr state");
-    try {
-      cc->writer()->keyEvent(downKeySym[0x1d], 0x1d, true);
-      cc->writer()->keyEvent(downKeySym[0xb8], 0xb8, true);
-    } catch (rdr::Exception& e) {
-      vlog.error("%s", e.str());
-      exit_vncviewer(e.str());
-    }
-  }
-#endif
 }
 
 
@@ -843,9 +921,9 @@ void Viewport::handleKeyRelease(int keyCode)
 
   try {
     if (keyCode > 0xff)
-      cc->writer()->keyEvent(iter->second, 0, false);
+      cc->writer()->writeKeyEvent(iter->second, 0, false);
     else
-      cc->writer()->keyEvent(iter->second, keyCode, false);
+      cc->writer()->writeKeyEvent(iter->second, keyCode, false);
   } catch (rdr::Exception& e) {
     vlog.error("%s", e.str());
     exit_vncviewer(e.str());
@@ -858,17 +936,10 @@ void Viewport::handleKeyRelease(int keyCode)
 int Viewport::handleSystemEvent(void *event, void *data)
 {
   Viewport *self = (Viewport *)data;
-  Fl_Widget *focus;
 
   assert(self);
 
-  focus = Fl::grab();
-  if (!focus)
-    focus = Fl::focus();
-  if (!focus)
-    return 0;
-
-  if (focus != self)
+  if (!self->hasFocus())
     return 0;
 
   assert(event);
@@ -886,6 +957,24 @@ int Viewport::handleSystemEvent(void *event, void *data)
     isExtended = (msg->lParam & (1 << 24)) != 0;
 
     keyCode = ((msg->lParam >> 16) & 0xff);
+
+    // Windows doesn't have a proper AltGr, but handles it using fake
+    // Ctrl+Alt. However the remote end might not be Windows, so we need
+    // to merge those in to a single AltGr event. We detect this case
+    // by seeing the two key events directly after each other with a very
+    // short time between them (<50ms) and supress the Ctrl event.
+    if (self->altGrArmed) {
+      self->altGrArmed = false;
+      Fl::remove_timeout(handleAltGrTimeout);
+
+      if (isExtended && (keyCode == 0x38) && (vKey == VK_MENU) &&
+          ((msg->time - self->altGrCtrlTime) < 50)) {
+        // Alt seen, so this is an AltGr sequence
+      } else {
+        // Not Alt, so fire the queued up Ctrl event
+        self->handleKeyPress(0x1d, XK_Control_L);
+      }
+    }
 
     if (keyCode == SCAN_FAKE) {
       vlog.debug("Ignoring fake key press (virtual key 0x%02x)", vKey);
@@ -946,6 +1035,20 @@ int Viewport::handleSystemEvent(void *event, void *data)
     if ((keySym == XK_Shift_L) && (keyCode == 0x36))
       keySym = XK_Shift_R;
 
+    // AltGr handling (see above)
+    if (win32_has_altgr()) {
+      if ((keyCode == 0xb8) && (keySym == XK_Alt_R))
+        keySym = XK_ISO_Level3_Shift;
+
+      // Possible start of AltGr sequence?
+      if ((keyCode == 0x1d) && (keySym == XK_Control_L)) {
+        self->altGrArmed = true;
+        self->altGrCtrlTime = msg->time;
+        Fl::add_timeout(0.1, handleAltGrTimeout, self);
+        return 1;
+      }
+    }
+
     self->handleKeyPress(keyCode, keySym);
 
     return 1;
@@ -958,6 +1061,14 @@ int Viewport::handleSystemEvent(void *event, void *data)
     isExtended = (msg->lParam & (1 << 24)) != 0;
 
     keyCode = ((msg->lParam >> 16) & 0xff);
+
+    // We can't get a release in the middle of an AltGr sequence, so
+    // abort that detection
+    if (self->altGrArmed) {
+      self->altGrArmed = false;
+      Fl::remove_timeout(handleAltGrTimeout);
+      self->handleKeyPress(0x1d, XK_Control_L);
+    }
 
     if (keyCode == SCAN_FAKE) {
       vlog.debug("Ignoring fake key release (virtual key 0x%02x)", vKey);
@@ -1071,6 +1182,18 @@ int Viewport::handleSystemEvent(void *event, void *data)
   return 0;
 }
 
+#ifdef WIN32
+void Viewport::handleAltGrTimeout(void *data)
+{
+  Viewport *self = (Viewport *)data;
+
+  assert(self);
+
+  self->altGrArmed = false;
+  self->handleKeyPress(0x1d, XK_Control_L);
+}
+#endif
+
 void Viewport::initContextMenu()
 {
   contextMenu->clear();
@@ -1138,7 +1261,12 @@ void Viewport::popupContextMenu()
   if (Fl::belowmouse() == this)
     window()->cursor(FL_CURSOR_DEFAULT);
 
+  // FLTK also doesn't switch focus properly for menus
+  handle(FL_UNFOCUS);
+
   m = contextMenu->popup();
+
+  handle(FL_FOCUS);
 
   // Back to our proper mouse pointer.
   if ((Fl::belowmouse() == this) && cursor)

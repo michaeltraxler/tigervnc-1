@@ -22,6 +22,8 @@
 
 #include <map>
 
+#include <rfb/Rect.h>
+
 #include <FL/Fl_Widget.H>
 
 class Fl_Menu_Button;
@@ -43,14 +45,15 @@ public:
   // Flush updates to screen
   void updateWindow();
 
+  // Incoming clipboard from server
+  void serverCutText(const char* str, rdr::U32 len);
+
   // New image for the locally rendered cursor
   void setCursor(int width, int height, const rfb::Point& hotspot,
                  const rdr::U8* data);
 
   // Change client LED state
   void setLEDState(unsigned int state);
-  // Change server LED state
-  void pushLEDState();
 
   void draw(Surface* dst);
 
@@ -63,10 +66,14 @@ public:
   int handle(int event);
 
 private:
+  bool hasFocus();
 
   unsigned int getModifierMask(unsigned int keysym);
 
   static void handleClipboardChange(int source, void *data);
+
+  void clearPendingClipboard();
+  void flushPendingClipboard();
 
   void handlePointerEvent(const rfb::Point& pos, int buttonMask);
   static void handlePointerTimeout(void *data);
@@ -75,6 +82,12 @@ private:
   void handleKeyRelease(int keyCode);
 
   static int handleSystemEvent(void *event, void *data);
+
+#ifdef WIN32
+  static void handleAltGrTimeout(void *data);
+#endif
+
+  void pushLEDState();
 
   void initContextMenu();
   void popupContextMenu();
@@ -93,6 +106,16 @@ private:
 
   typedef std::map<int, rdr::U32> DownMap;
   DownMap downKeySym;
+
+#ifdef WIN32
+  bool altGrArmed;
+  unsigned int altGrCtrlTime;
+#endif
+
+  bool firstLEDState;
+
+  const char* pendingServerCutText;
+  const char* pendingClientCutText;
 
   rdr::U32 menuKeySym;
   int menuKeyCode, menuKeyFLTK;

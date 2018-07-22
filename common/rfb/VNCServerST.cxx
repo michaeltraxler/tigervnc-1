@@ -1,5 +1,5 @@
 /* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright 2009-2017 Pierre Ossman for Cendio AB
+ * Copyright 2009-2018 Pierre Ossman for Cendio AB
  * 
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,12 +51,13 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include <rfb/ComparingUpdateTracker.h>
+#include <rfb/KeyRemapper.h>
+#include <rfb/ListConnInfo.h>
+#include <rfb/Security.h>
 #include <rfb/ServerCore.h>
 #include <rfb/VNCServerST.h>
 #include <rfb/VNCSConnectionST.h>
-#include <rfb/ComparingUpdateTracker.h>
-#include <rfb/Security.h>
-#include <rfb/KeyRemapper.h>
 #include <rfb/util.h>
 #include <rfb/ledStates.h>
 
@@ -104,10 +105,7 @@ VNCServerST::~VNCServerST()
   }
 
   // Stop the desktop object if active, *only* after deleting all clients!
-  if (desktopStarted) {
-    desktopStarted = false;
-    desktop->stop();
-  }
+  stopDesktop();
 
   if (comparer)
     comparer->logStats();
@@ -153,11 +151,8 @@ void VNCServerST::removeSocket(network::Socket* sock) {
       delete *ci;
 
       // - Check that the desktop object is still required
-      if (authClientCount() == 0 && desktopStarted) {
-        slog.debug("no authenticated clients - stopping desktop");
-        desktopStarted = false;
-        desktop->stop();
-      }
+      if (authClientCount() == 0)
+        stopDesktop();
 
       if (comparer)
         comparer->logStats();
@@ -313,14 +308,19 @@ void VNCServerST::setPixelBuffer(PixelBuffer* pb_, const ScreenSet& layout)
   screenLayout = layout;
 
   if (!pb) {
+    screenLayout = ScreenSet();
+
     if (desktopStarted)
       throw Exception("setPixelBuffer: null PixelBuffer when desktopStarted?");
+
     return;
   }
 
+  // Assume the framebuffer contents wasn't saved and reset everything
+  // that tracks its contents
   comparer = new ComparingUpdateTracker(pb);
   renderedCursorInvalid = true;
-  startFrameClock();
+  add_changed(pb->getRect());
 
   // Make sure that we have at least one screen
   if (screenLayout.num_screens() == 0)
@@ -337,18 +337,10 @@ void VNCServerST::setPixelBuffer(PixelBuffer* pb_, const ScreenSet& layout)
 
 void VNCServerST::setPixelBuffer(PixelBuffer* pb_)
 {
-  ScreenSet layout;
-
-  if (!pb_) {
-    if (desktopStarted)
-      throw Exception("setPixelBuffer: null PixelBuffer when desktopStarted?");
-    return;
-  }
-
-  layout = screenLayout;
+  ScreenSet layout = screenLayout;
 
   // Check that the screen layout is still valid
-  if (!layout.validate(pb_->width(), pb_->height())) {
+  if (pb_ && !layout.validate(pb_->width(), pb_->height())) {
     Rect fbRect;
     ScreenSet::iterator iter, iter_next;
 
@@ -549,9 +541,23 @@ void VNCServerST::startDesktop()
   if (!desktopStarted) {
     slog.debug("starting desktop");
     desktop->start(this);
-    desktopStarted = true;
     if (!pb)
       throw Exception("SDesktop::start() did not set a valid PixelBuffer");
+    desktopStarted = true;
+    // The tracker might have accumulated changes whilst we were
+    // stopped, so flush those out
+    if (!comparer->is_empty())
+      writeUpdate();
+  }
+}
+
+void VNCServerST::stopDesktop()
+{
+  if (desktopStarted) {
+    slog.debug("stopping desktop");
+    desktopStarted = false;
+    desktop->stop();
+    stopFrameClock();
   }
 }
 
@@ -579,6 +585,8 @@ void VNCServerST::startFrameClock()
     return;
   if (blockCounter > 0)
     return;
+  if (!desktopStarted)
+    return;
 
   // The first iteration will be just half a frame as we get a very
   // unstable update rate if we happen to be perfectly in sync with
@@ -589,6 +597,17 @@ void VNCServerST::startFrameClock()
 void VNCServerST::stopFrameClock()
 {
   frameTimer.stop();
+}
+
+int VNCServerST::msToNextUpdate()
+{
+  // FIXME: If the application is updating slower than frameRate then
+  //        we could allow the clients more time here
+
+  if (!frameTimer.isStarted())
+    return 1000/rfb::Server::frameRate/2;
+  else
+    return frameTimer.getRemainingMs();
 }
 
 // writeUpdate() is called on a regular interval in order to see what
@@ -606,6 +625,7 @@ void VNCServerST::writeUpdate()
   std::list<VNCSConnectionST*>::iterator ci, ci_next;
 
   assert(blockCounter == 0);
+  assert(desktopStarted);
 
   comparer->getUpdateInfo(&ui, pb->getRect());
   toCheck = ui.changed.union_(ui.copied);
@@ -642,17 +662,21 @@ void VNCServerST::writeUpdate()
 // checkUpdate() is called by clients to see if it is safe to read from
 // the framebuffer at this time.
 
-bool VNCServerST::checkUpdate()
+Region VNCServerST::getPendingRegion()
 {
+  UpdateInfo ui;
+
   // Block clients as the frame buffer cannot be safely accessed
   if (blockCounter > 0)
-    return false;
+    return pb->getRect();
 
   // Block client from updating if there are pending updates
-  if (!comparer->is_empty())
-    return false;
+  if (comparer->is_empty())
+    return Region();
 
-  return true;
+  comparer->getUpdateInfo(&ui, pb->getRect());
+
+  return ui.changed.union_(ui.copied);
 }
 
 const RenderedCursor* VNCServerST::getRenderedCursor()

@@ -99,10 +99,10 @@ static const char *about_text()
   snprintf(buffer, sizeof(buffer),
            _("TigerVNC Viewer %d-bit v%s\n"
              "Built on: %s\n"
-             "Copyright (C) 1999-%d TigerVNC Team and many others (see README.txt)\n"
+             "Copyright (C) 1999-%d TigerVNC Team and many others (see README.rst)\n"
              "See http://www.tigervnc.org for information on TigerVNC."),
            (int)sizeof(size_t)*8, PACKAGE_VERSION,
-           BUILD_TIMESTAMP, 2017);
+           BUILD_TIMESTAMP, 2018);
 
   return buffer;
 }
@@ -349,8 +349,9 @@ static void usage(const char *programName)
 
   fprintf(stderr,
           "\nusage: %s [parameters] [host:displayNum] [parameters]\n"
-          "       %s [parameters] -listen [port] [parameters]\n",
-          programName, programName);
+          "       %s [parameters] -listen [port] [parameters]\n"
+          "       %s [parameters] [.tigervnc file]\n",
+          programName, programName, programName);
   fprintf(stderr,"\n"
           "Parameters can be turned on with -<param> or off with -<param>=0\n"
           "Parameters which take a value can be specified as "
@@ -366,6 +367,40 @@ static void usage(const char *programName)
 #endif
 
   exit(1);
+}
+
+static void
+potentiallyLoadConfigurationFile(char *vncServerName)
+{
+  const bool hasPathSeparator = (strchr(vncServerName, '/') != NULL ||
+                                 (strchr(vncServerName, '\\')) != NULL);
+
+  if (hasPathSeparator) {
+#ifndef WIN32
+    struct stat sb;
+
+    // This might be a UNIX socket, we need to check
+    if (stat(vncServerName, &sb) == -1) {
+      // Some access problem; let loadViewerParameters() deal with it...
+    } else {
+      if ((sb.st_mode & S_IFMT) == S_IFSOCK)
+        return;
+    }
+#endif
+
+    try {
+      const char* newServerName;
+      newServerName = loadViewerParameters(vncServerName);
+      // This might be empty, but we still need to clear it so we
+      // don't try to connect to the filename
+      strncpy(vncServerName, newServerName, VNCSERVERNAMELEN);
+    } catch (rfb::Exception& e) {
+      vlog.error("%s", e.str());
+      if (alertOnFatalError)
+        fl_alert("%s", e.str());
+      exit(EXIT_FAILURE);
+    }
+  }
 }
 
 #ifndef WIN32
@@ -484,20 +519,19 @@ int main(int argc, char** argv)
   Configuration::enableViewerParams();
 
   /* Load the default parameter settings */
-  const char* defaultServerName;
+  char defaultServerName[VNCSERVERNAMELEN] = "";
   try {
-    defaultServerName = loadViewerParameters(NULL);
+    const char* configServerName;
+    configServerName = loadViewerParameters(NULL);
+    if (configServerName != NULL)
+      strncpy(defaultServerName, configServerName, VNCSERVERNAMELEN);
   } catch (rfb::Exception& e) {
-    defaultServerName = "";
     vlog.error("%s", e.str());
     if (alertOnFatalError)
       fl_alert("%s", e.str());
   }
 
   for (int i = 1; i < argc;) {
-    if (Fl::arg(argc, argv, i))
-      continue;
-
     if (Configuration::setParam(argv[i])) {
       i++;
       continue;
@@ -519,10 +553,16 @@ int main(int argc, char** argv)
     i++;
   }
 
+  // Check if the server name in reality is a configuration file
+  potentiallyLoadConfigurationFile(vncServerName);
+
   mkvnchomedir();
   
 
 #if !defined(WIN32) && !defined(__APPLE__)
+  if (strcmp(display, "") != 0) {
+    Fl::display(display);
+  }
   fl_open_display();
   XkbSetDetectableAutoRepeat(fl_display, True, NULL);
 #endif
@@ -548,7 +588,7 @@ int main(int argc, char** argv)
 #endif
 
   if (listenMode) {
-    std::list<TcpListener*> listeners;
+    std::list<SocketListener*> listeners;
     try {
       int port = 5500;
       if (isdigit(vncServerName[0]))
@@ -562,7 +602,7 @@ int main(int argc, char** argv)
       while (sock == NULL) {
         fd_set rfds;
         FD_ZERO(&rfds);
-        for (std::list<TcpListener*>::iterator i = listeners.begin();
+        for (std::list<SocketListener*>::iterator i = listeners.begin();
              i != listeners.end();
              i++)
           FD_SET((*i)->getFd(), &rfds);
@@ -577,7 +617,7 @@ int main(int argc, char** argv)
           }
         }
 
-        for (std::list<TcpListener*>::iterator i = listeners.begin ();
+        for (std::list<SocketListener*>::iterator i = listeners.begin ();
              i != listeners.end();
              i++)
           if (FD_ISSET((*i)->getFd(), &rfds)) {
